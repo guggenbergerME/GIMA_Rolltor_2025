@@ -1,0 +1,3 @@
+Bonus-Tipp (optional, aber empfohlen)
+
+Ergänze in arduino-relay-status.php eine API-Key-Prüfung (z. B. ?key=1234) oder Signaturprüfung, um unautorisierte Zugriffe zu vermeiden.

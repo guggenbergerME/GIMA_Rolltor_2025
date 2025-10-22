@@ -3,7 +3,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/scheduler_error.log');
-require_once 'db.php';
+require_once __DIR__ . '/db.php';
 date_default_timezone_set('Europe/Berlin');
 
 /* ============================================================
@@ -13,11 +13,10 @@ $arduino_ip   = "10.140.1.10";
 $arduino_port = 8888;
 $arduino_pass = "1234";
 
-$relais_auf   = 1;   // Tor-Auf (dauerhaft)
+$relais_auf        = 1; // Tor-Auf (dauerhaft)
 $relais_schliessen = 2; // Schließimpuls
-
-$impuls_interval_min = 5;   // alle 5 Minuten Impuls
-$impuls_dauer_ms     = 500; // Impulsdauer 0,5s
+$impuls_interval_min = 5;
+$impuls_dauer_ms     = 500;
 
 /* ============================================================
    UDP SENDEN
@@ -26,23 +25,6 @@ function send_udp($ip, $port, $message) {
     $sock = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
     socket_sendto($sock, $message, strlen($message), 0, $ip, $port);
     socket_close($sock);
-}
-
-/* ============================================================
-   STATUS IN DB SPEICHERN
-   ============================================================ */
-function save_relais_status($pdo, $relais, $status) {
-    $stmt = $pdo->prepare("REPLACE INTO relais_status (relais_nummer, status) VALUES (?, ?)");
-    $stmt->execute([$relais, $status]);
-}
-
-/* ============================================================
-   STATUS AUS DB LADEN
-   ============================================================ */
-function get_relais_status($pdo, $relais) {
-    $stmt = $pdo->prepare("SELECT status FROM relais_status WHERE relais_nummer = ?");
-    $stmt->execute([$relais]);
-    return $stmt->fetchColumn();
 }
 
 /* ============================================================
@@ -107,32 +89,23 @@ if ($regel === "sonder") {
 }
 
 /* ============================================================
-   AKTUELLE UND LETZTE RELAIS-ZUSTÄNDE LADEN
+   AKTUELLE BITMAP LADEN
    ============================================================ */
-$letzter_auf_status = get_relais_status($pdo, $relais_auf);
-$aktueller_auf_status = $tor_offen ? "ON" : "OFF";
+$stmt = $pdo->prepare("SELECT desired_state FROM relais_status WHERE ip = :ip LIMIT 1");
+$stmt->execute(['ip' => $arduino_ip]);
+$bitmap = $stmt->fetchColumn();
+if (!$bitmap) $bitmap = "0000"; // Standardwert
 
-$log = "[" . date('Y-m-d H:i:s') . "] Regel: $regel | Zeit: $uhrzeit | Tor: $aktueller_auf_status ";
+$desired_bitmap = $bitmap;
+$relais_index = $relais_auf - 1;
 
 /* ============================================================
-   RELAIS-STATUS WIEDERHERSTELLUNG BEIM START
+   TORSTATUS SETZEN IM BITMUSTER
    ============================================================ */
-if ($letzter_auf_status === false) {
-    // Erststart – setze aktuellen Sollzustand
-    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_auf}=$aktueller_auf_status");
-    save_relais_status($pdo, $relais_auf, $aktueller_auf_status);
-    $log .= "→ Initial gesetzt\n";
-}
-/* ============================================================
-   STATUS-ÄNDERUNG STEUERN
-   ============================================================ */
-elseif ($letzter_auf_status !== $aktueller_auf_status) {
-    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_auf}=$aktueller_auf_status");
-    save_relais_status($pdo, $relais_auf, $aktueller_auf_status);
-    $log .= "→ Relais $relais_auf = $aktueller_auf_status\n";
-} else {
-    $log .= "(keine Änderung)\n";
-}
+$aktueller_auf_status = $tor_offen ? "1" : "0";
+$desired_bitmap[$relais_index] = $aktueller_auf_status;
+
+$log = "[" . date('Y-m-d H:i:s') . "] Regel: $regel | Zeit: $uhrzeit | Tor: " . ($tor_offen ? "OFFEN" : "ZU");
 
 /* ============================================================
    SCHLIEẞIMPULS ALLE 5 MINUTEN
@@ -141,12 +114,21 @@ if (!$tor_offen && $minute % $impuls_interval_min == 0) {
     send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=ON");
     usleep($impuls_dauer_ms * 1000);
     send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=OFF");
-    save_relais_status($pdo, $relais_schliessen, "OFF");
-    $log .= "→ Schließimpuls (Relais 2)\n";
+    $log .= " → Schließimpuls gesendet";
 }
+
+/* ============================================================
+   DATENBANK AKTUALISIEREN
+   ============================================================ */
+$stmt = $pdo->prepare("
+    INSERT INTO relais_status (ip, desired_state, current_state, updated_at)
+    VALUES (:ip, :desired, :desired, NOW())
+    ON DUPLICATE KEY UPDATE desired_state = :desired, updated_at = NOW()
+");
+$stmt->execute(['ip' => $arduino_ip, 'desired' => $desired_bitmap]);
 
 /* ============================================================
    LOGDATEI
    ============================================================ */
-file_put_contents(__DIR__ . "/tor.log", $log, FILE_APPEND);
+file_put_contents(__DIR__ . "/tor.log", $log . "\n", FILE_APPEND);
 echo nl2br(htmlspecialchars($log));

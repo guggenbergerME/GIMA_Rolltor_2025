@@ -74,6 +74,24 @@ $sondertage_preview = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Nächster geplanter Befehl
 $next = find_next_command($pdo,365);
+
+// Relais-Status aus DB (aktueller Zustand des Arduino)
+$arduino_ip = "10.140.1.10"; // deine feste Arduino-IP
+$stmt = $pdo->prepare("SELECT current_state, updated_at FROM relais_status WHERE ip = :ip LIMIT 1");
+$stmt->execute(['ip' => $arduino_ip]);
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$bitmap = $row['current_state'] ?? '0000';
+$updated = $row['updated_at'] ?? null;
+$relais = [];
+
+for($i=0; $i<4; $i++){
+    $state = isset($bitmap[$i]) && $bitmap[$i]==='1' ? 'ON' : 'OFF';
+    $relais[] = [
+        'nummer' => $i+1,
+        'status' => $state
+    ];
+}
 ?>
 <!DOCTYPE html>
 <html lang="de">
@@ -86,10 +104,7 @@ $next = find_next_command($pdo,365);
 .relais-box{border:1px solid #ccc;border-radius:10px;padding:8px;text-align:center;background:#fafafa;}
 .relais-on{background:#c8f7c5;border-color:#4CAF50;}
 .relais-off{background:#f7c5c5;border-color:#f44336;}
-.relais-unknown{background:#eee;border-color:#aaa;}
 .status-box{padding:10px;border-radius:8px;margin-bottom:10px;}
-.status-offen{background:#c8f7c5;border:2px solid #4CAF50;}
-.status-geschlossen{background:#f7c5c5;border:2px solid #f44336;}
 </style>
 </head>
 <body>
@@ -107,8 +122,22 @@ $next = find_next_command($pdo,365);
 <main class="container">
 <h1>Rolltor Steuerung – Übersicht</h1>
 
-
-
+<!-- Relaisstatus -->
+<section>
+  <h2>Aktueller Relaisstatus (Arduino <?= htmlspecialchars($arduino_ip) ?>)</h2>
+  <div class="relais-status">
+    <?php foreach($relais as $r): 
+      $class = $r['status']==='ON'?'relais-on':'relais-off'; ?>
+      <div class="relais-box <?= $class ?>" id="relais<?= $r['nummer'] ?>">
+        <strong>Relais <?= $r['nummer'] ?></strong><br>
+        <span><?= $r['status'] ?></span><br>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php if($updated): ?>
+    <p><small>Letztes Update: <?= htmlspecialchars(date('d.m.Y H:i:s', strtotime($updated))) ?></small></p>
+  <?php endif; ?>
+</section>
 
 <!-- Nächster geplanter Befehl -->
 <section>
@@ -145,25 +174,5 @@ $next = find_next_command($pdo,365);
 </main>
 
 <?php include __DIR__.'/footer.php'; ?>
-
-<script>
-// === Relaisstatus automatisch aktualisieren ===
-async function updateRelaisStatus(){
-  try {
-    const res = await fetch('api/relais_status.php?_t=' + Date.now());
-    if(!res.ok) return;
-    const data = await res.json();
-    data.forEach(r=>{
-      const el = document.getElementById('relais'+r.relais_nummer);
-      if(!el) return;
-      el.querySelector('strong').textContent = r.status;
-      el.querySelector('small').textContent = new Date(r.timestamp).toLocaleString('de-DE');
-      el.className = 'relais-box ' + (r.status==='ON'?'relais-on':(r.status==='OFF'?'relais-off':'relais-unknown'));
-    });
-  } catch(e){ console.error(e); }
-}
-setInterval(updateRelaisStatus, 30000);
-</script>
-
 </body>
 </html>
