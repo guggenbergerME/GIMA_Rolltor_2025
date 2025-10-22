@@ -1,0 +1,276 @@
+<?php
+// www/index.php
+require_once 'db.php';
+date_default_timezone_set('Europe/Berlin');
+
+/* -----------------------------
+   Hilfsfunktionen
+   ----------------------------- */
+
+// Feiertage Bayern (wie vorher)
+function feiertage_bayern($jahr) {
+    $ostern = easter_date($jahr);
+    return [
+        'Neujahr' => "$jahr-01-01",
+        'Heilige Drei Könige' => "$jahr-01-06",
+        'Tag der Arbeit' => "$jahr-05-01",
+        'Mariä Himmelfahrt' => "$jahr-08-15",
+        'Tag der Deutschen Einheit' => "$jahr-10-03",
+        'Allerheiligen' => "$jahr-11-01",
+        '1. Weihnachtstag' => "$jahr-12-25",
+        '2. Weihnachtstag' => "$jahr-12-26",
+        'Karfreitag' => date('Y-m-d', $ostern - 2 * 86400),
+        'Ostermontag' => date('Y-m-d', $ostern + 1 * 86400),
+        'Christi Himmelfahrt' => date('Y-m-d', $ostern + 39 * 86400),
+        'Pfingstmontag' => date('Y-m-d', $ostern + 50 * 86400),
+        'Fronleichnam' => date('Y-m-d', $ostern + 60 * 86400),
+    ];
+}
+
+// Liefert 'offen' oder 'geschlossen' für ein bestimmtes DateTime-Objekt
+function status_for_datetime(DateTime $dt, $pdo) {
+    $datum = $dt->format('Y-m-d');
+    $wochentag = (int)$dt->format('N'); // 1..7
+
+    // Sondertage prüfen
+    $stmt = $pdo->prepare("SELECT status FROM sondertage WHERE datum = ?");
+    $stmt->execute([$datum]);
+    $sonder = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($sonder) {
+        return $sonder['status']; // 'offen' oder 'geschlossen'
+    }
+
+    // Feiertage
+    $feiertage = feiertage_bayern((int)$dt->format('Y'));
+    if (in_array($datum, $feiertage)) {
+        return 'geschlossen';
+    }
+
+    // Wochenende
+    if ($wochentag >= 6) {
+        return 'geschlossen';
+    }
+
+    // Normaler Werktag: lade torzeiten für Modus
+    $modus = ($dt->format('I') == 1) ? 'sommer' : 'winter';
+    $stmt = $pdo->prepare("SELECT startzeit, endzeit FROM torzeiten WHERE modus = ?");
+    $stmt->execute([$modus]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return 'geschlossen'; // Fallback
+    }
+
+    $time = $dt->format('H:i:s');
+    if ($time >= $row['startzeit'] && $time <= $row['endzeit']) {
+        return 'offen';
+    }
+    return 'geschlossen';
+}
+
+/**
+ * Returns array of intervals for a given date (YYYY-MM-DD).
+ * Each interval is ['start' => DateTime, 'end' => DateTime, 'reason' => string]
+ */
+function intervals_for_date(string $date, $pdo) : array {
+    $tz = new DateTimeZone('Europe/Berlin');
+    $result = [];
+
+    // Sondertag?
+    $stmt = $pdo->prepare("SELECT status, kommentar FROM sondertage WHERE datum = ?");
+    $stmt->execute([$date]);
+    $sonder = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($sonder) {
+        if ($sonder['status'] === 'offen') {
+            // ganzer Tag offen
+            $start = new DateTime("$date 00:00:00", $tz);
+            $end   = new DateTime("$date 23:59:59", $tz);
+            $result[] = ['start'=>$start, 'end'=>$end, 'reason'=>'Sondertag: '.$sonder['kommentar']];
+        }
+        // wenn Sondertag geschlossen => keine Intervalle
+        return $result;
+    }
+
+    // Feiertag?
+    $feiertage = feiertage_bayern((int)substr($date,0,4));
+    if (in_array($date, $feiertage)) {
+        return $result; // keine Intervalle an Feiertagen
+    }
+
+    // Wochenende?
+    $wd = (int)date('N', strtotime($date));
+    if ($wd >= 6) {
+        return $result;
+    }
+
+    // Normaler Werktag -> hole torzeiten für Modus (sommer/winter)
+    $dtSample = new DateTime("$date 12:00:00", $tz); // Mittags, um DST korrekt zu ermitteln
+    $modus = ($dtSample->format('I') == 1) ? 'sommer' : 'winter';
+    $stmt = $pdo->prepare("SELECT startzeit, endzeit FROM torzeiten WHERE modus = ?");
+    $stmt->execute([$modus]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return $result;
+
+    // Erzeuge DateTime Objekte für Start/Ende
+    $start = new DateTime("$date " . $row['startzeit'], $tz);
+    $end   = new DateTime("$date " . $row['endzeit'], $tz);
+
+    // Falls Start == End (defensiv), ignoriere
+    if ($start < $end) {
+        $result[] = ['start'=>$start, 'end'=>$end, 'reason'=> ucfirst($modus).'zeit'];
+    }
+    return $result;
+}
+
+/**
+ * Find next command (open/close) from now up to $daysAhead days.
+ * Returns array: ['when' => DateTime, 'action' => 'öffnen'|'schließen', 'reason' => string]
+ * or null if none found.
+ */
+function find_next_command($pdo, $daysAhead = 365) {
+    $tz = new DateTimeZone('Europe/Berlin');
+    $now = new DateTime('now', $tz);
+
+    // Check current status: if inside an interval, next command is closing at that interval's end.
+    // We'll scan days from today to today + daysAhead.
+    for ($dayOffset = 0; $dayOffset <= $daysAhead; $dayOffset++) {
+        $date = (clone $now)->modify("+{$dayOffset} day")->format('Y-m-d');
+        $intervals = intervals_for_date($date, $pdo);
+
+        foreach ($intervals as $iv) {
+            $start = $iv['start'];
+            $end = $iv['end'];
+
+            // If interval ends before now, skip
+            if ($end <= $now) continue;
+
+            // If interval starts > now -> next command is öffnen at start (if start is in future)
+            if ($start > $now) {
+                return ['when'=>$start, 'action'=>'öffnen', 'reason'=>$iv['reason']];
+            }
+
+            // If start <= now < end -> currently open => next command schließen at end
+            if ($start <= $now && $now < $end) {
+                return ['when'=>$end, 'action'=>'schließen', 'reason'=>$iv['reason']];
+            }
+        }
+        // no intervals this day -> continue
+    }
+    return null;
+}
+
+/* -----------------------------
+   Seite: Laden von Daten & API-Status
+   ----------------------------- */
+
+// Lade torzeiten (sommer/winter)
+$stmt = $pdo->query("SELECT * FROM torzeiten");
+$zeiten = [];
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $zeiten[$row['modus']] = $row;
+}
+
+// Lade einige Sondertage zur Anzeige
+$stmt = $pdo->query("SELECT * FROM sondertage ORDER BY datum ASC LIMIT 10");
+$sondertage_preview = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// aktuellen Status via API (lokal)
+$api = @file_get_contents("http://localhost/api/status.php");
+$status = $api ? json_decode($api, true) : null;
+
+// Finde nächsten Befehl
+$next = find_next_command($pdo, 365);
+
+?>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Rolltor Steuerung – Übersicht</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="navbar">
+  <img src="logo.png" class="nav-logo" alt="GIMA">
+  <nav>
+    <a href="index.php" class="active">Übersicht</a>
+    <a href="zeiten.php">Zeiten</a>
+    <a href="sondertage.php">Sondertage</a>
+    <a href="vorschau.php">Vorschau</a>
+  </nav>
+</header>
+
+<main class="container">
+  <h1>Rolltor Steuerung – Übersicht</h1>
+
+  <!-- Aktueller Status -->
+  <?php if ($status): ?>
+    <div class="status-box <?= ($status['status'] === 'offen') ? 'status-offen' : 'status-geschlossen' ?>">
+      <b>Aktueller Status:</b> <?= strtoupper(htmlspecialchars($status['status'])) ?><br>
+      <small>
+        <?= htmlspecialchars((new IntlDateFormatter('de_DE', IntlDateFormatter::FULL, IntlDateFormatter::SHORT, 'Europe/Berlin', IntlDateFormatter::GREGORIAN, 'EEEE, dd. MMMM yyyy'))->format(new DateTime())) ?>
+        – <?= htmlspecialchars($status['zeit']) ?>
+      </small><br>
+      <?php if (isset($status['grund'])): ?>
+        <small><i><?= htmlspecialchars($status['grund']) ?></i></small>
+      <?php endif; ?>
+    </div>
+  <?php else: ?>
+    <p>Kein Status verfügbar.</p>
+  <?php endif; ?>
+
+  <!-- Nächster Befehl -->
+  <section>
+    <h2>Nächster geplanter Befehl</h2>
+    <?php if ($next): 
+        $when = $next['when'];
+        $action = $next['action']; // öffnen / schließen
+        $reason = $next['reason'];
+    ?>
+      <p>
+        <strong><?= ucfirst($action) ?></strong>
+        am <b><?= htmlspecialchars($when->format('d.m.Y')) ?></b>
+        um <b><?= htmlspecialchars($when->format('H:i:s')) ?></b>
+        (Grund: <?= htmlspecialchars($reason) ?>)
+      </p>
+    <?php else: ?>
+      <p><i>Kein geplanter Befehl in den nächsten 365 Tagen gefunden.</i></p>
+    <?php endif; ?>
+  </section>
+
+  <!-- Schnellzugriff: Zeiten & Sondertage -->
+  <section style="display:flex; gap:20px; margin-top:12px;">
+    <div style="flex:1;">
+      <h3>Sommer-/Winterzeiten</h3>
+      <p><b>Sommerzeit:</b> <?= htmlspecialchars($zeiten['sommer']['startzeit'] ?? '-') ?> – <?= htmlspecialchars($zeiten['sommer']['endzeit'] ?? '-') ?></p>
+      <p><b>Winterzeit:</b> <?= htmlspecialchars($zeiten['winter']['startzeit'] ?? '-') ?> – <?= htmlspecialchars($zeiten['winter']['endzeit'] ?? '-') ?></p>
+    </div>
+
+    <div style="flex:1;">
+      <h3>Sondertage (Auszug)</h3>
+      <?php if (count($sondertage_preview) > 0): ?>
+        <table>
+          <tr><th>Datum</th><th>Status</th><th>Kommentar</th></tr>
+          <?php foreach ($sondertage_preview as $s): ?>
+            <tr>
+              <td><?= htmlspecialchars($s['datum']) ?></td>
+              <td><?= htmlspecialchars($s['status']) ?></td>
+              <td><?= htmlspecialchars($s['kommentar']) ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </table>
+      <?php else: ?>
+        <p><i>Keine Sondertage definiert.</i></p>
+      <?php endif; ?>
+    </div>
+  </section>
+
+</main>
+
+<?php
+// Footer per include (separate Datei)
+include __DIR__ . '/footer.php';
+?>
+
+</body>
+</html>

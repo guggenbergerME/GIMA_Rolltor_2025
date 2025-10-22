@@ -1,0 +1,203 @@
+/* ===== GIMA Corporate Design ===== */
+:root {
+  --gima-red: #e94b1f;
+  --gima-dark: #2d2d2d;
+  --gima-light: #f6f6f6;
+  --gima-border: #dddddd;
+  --gima-success: #4caf50;
+  --gima-error: #f44336;
+  --gima-orange: #ff9800;
+}
+
+/* === Grundlayout === */
+body {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--gima-light);
+  color: var(--gima-dark);
+  margin: 0;
+  padding: 20px;
+}
+
+.logo {
+  height: 50px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  border-bottom: 3px solid var(--gima-red);
+  padding-bottom: 5px;
+  color: var(--gima-dark);
+}
+
+h2 {
+  color: var(--gima-dark);
+  margin-top: 25px;
+}
+
+/* === Tabellen === */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--gima-border);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  white-space: nowrap;
+}
+
+th {
+  background-color: var(--gima-dark);
+  color: white;
+  padding: 10px;
+}
+
+td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--gima-border);
+}
+
+tr:nth-child(even) {
+  background: #fafafa;
+}
+
+tr:hover {
+  background-color: #fdf1ee;
+}
+
+/* === Farbmarkierungen === */
+.color-green { color: var(--gima-success); }
+.color-red { color: var(--gima-error); }
+.color-orange { color: var(--gima-orange); }
+
+/* === Buttons === */
+button, .button {
+  background-color: var(--gima-red);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+button:hover, .button:hover {
+  background-color: #c63d19;
+}
+
+/* === Formulare === */
+fieldset {
+  border: 1px solid var(--gima-border);
+  border-radius: 5px;
+  background: #fff;
+  padding: 15px;
+  margin-bottom: 25px;
+}
+
+legend {
+  font-weight: bold;
+  color: var(--gima-red);
+  padding: 0 5px;
+}
+
+input[type="date"],
+input[type="time"],
+input[type="text"],
+select {
+  padding: 6px;
+  border: 1px solid var(--gima-border);
+  border-radius: 3px;
+}
+
+input:focus, select:focus {
+  border-color: var(--gima-red);
+  outline: none;
+}
+
+/* === Statusbox === */
+.status-box {
+  padding: 10px 15px;
+  border-radius: 5px;
+  font-weight: bold;
+  width: fit-content;
+  margin-bottom: 20px;
+  border-left: 5px solid var(--gima-red);
+}
+
+.status-offen {
+  background: #e7f7ec;
+  border-left-color: var(--gima-success);
+}
+
+.status-geschlossen {
+  background: #ffe8e5;
+  border-left-color: var(--gima-error);
+}
+
+/* === Hilfsstile === */
+.scroll-table {
+  overflow-x: auto;
+}
+
+.success {
+  color: var(--gima-success);
+  font-weight: bold;
+}
+
+/* === Sommer-/Winterzeit nebeneinander === */
+.time-settings {
+  display: flex;
+  gap: 30px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.time-box {
+  flex: 1;
+  min-width: 250px;
+  background: #fff;
+  border: 1px solid var(--gima-border);
+  border-radius: 6px;
+  padding: 10px 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* === Monatsnavigation === */
+.month-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* Tabelle */
+.scroll-table {
+  overflow-x: auto;
+}
+
+/* === Navigation (Topbar) === */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--gima-dark);
+  padding: 8px 20px;
+  margin-bottom: 20px;
+}
+
+.nav-logo {
+  height: 40px;
+}
+
+.navbar nav a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+  margin-left: 20px;
+}
+
+.navbar nav a:hover {
+  color: var(--gima-red);
+}
+
+.navbar nav a.active {
+  color: var(--gima-red);
+}
