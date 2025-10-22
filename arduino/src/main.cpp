@@ -51,6 +51,8 @@ String getRelayBitmap();
 void applyDesiredBitmap(const char* bitmap);
 void sendHttpPost(const String& json);
 
+String ipToString(IPAddress ip);
+
 //**************************************************************************
 // SETUP
 //**************************************************************************
@@ -115,13 +117,14 @@ void maybeReportStatus() {
 
   // JSON vorbereiten
   String payload = "{\"ip\":\"";
-  payload += Ethernet.localIP().toString();
+  payload += ipToString(Ethernet.localIP());
   payload += "\",\"status\":\"";
   payload += currentStatus;
   payload += "\"}";
 
   sendHttpPost(payload);
 }
+
 
 //**************************************************************************
 // HTTP POST mit JSON an Server senden
@@ -193,4 +196,18 @@ void applyDesiredBitmap(const char* bitmap) {
   digitalWrite(RELAY2, bitmap[1] == '1' ? HIGH : LOW);
   digitalWrite(RELAY3, bitmap[2] == '1' ? HIGH : LOW);
   digitalWrite(RELAY4, bitmap[3] == '1' ? HIGH : LOW);
+}
+
+//**************************************************************************
+// Hilfsfunktion: IP-Adresse als String (UNO-kompatibel)
+//**************************************************************************
+String ipToString(IPAddress ip) {
+  String s = String(ip[0]);
+  s += ".";
+  s += String(ip[1]);
+  s += ".";
+  s += String(ip[2]);
+  s += ".";
+  s += String(ip[3]);
+  return s;
 }

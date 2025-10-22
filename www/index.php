@@ -72,28 +72,6 @@ while($row = $stmt->fetch(PDO::FETCH_ASSOC)){
 $stmt = $pdo->query("SELECT * FROM sondertage ORDER BY datum ASC LIMIT 10");
 $sondertage_preview = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Aktueller Relaisstatus aus DB (aktueller Stand vom Arduino)
-$stmt = $pdo->query("SELECT device_ip, r1, r2, r3, r4, updated_at FROM relais_status ORDER BY id DESC LIMIT 1");
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-$relais = [];
-if ($row) {
-    $relais = [
-        ['relais_nummer' => 1, 'status' => $row['r1'] ? 'ON' : 'OFF', 'timestamp' => $row['updated_at']],
-        ['relais_nummer' => 2, 'status' => $row['r2'] ? 'ON' : 'OFF', 'timestamp' => $row['updated_at']],
-        ['relais_nummer' => 3, 'status' => $row['r3'] ? 'ON' : 'OFF', 'timestamp' => $row['updated_at']],
-        ['relais_nummer' => 4, 'status' => $row['r4'] ? 'ON' : 'OFF', 'timestamp' => $row['updated_at']],
-    ];
-}
-
-
-// Bestimme Gesamtstatus (z. B. Tor offen, wenn Relais 1 = ON)
-$gesamtStatus = 'unbekannt';
-if(count($relais) > 0){
-    $onCount = array_sum(array_map(fn($r)=>$r['status']==='ON'?1:0, $relais));
-    $gesamtStatus = ($onCount > 0) ? 'offen' : 'geschlossen';
-}
-
 // Nächster geplanter Befehl
 $next = find_next_command($pdo,365);
 ?>
@@ -129,26 +107,8 @@ $next = find_next_command($pdo,365);
 <main class="container">
 <h1>Rolltor Steuerung – Übersicht</h1>
 
-<!-- Aktueller Gesamtstatus -->
-<div class="status-box <?= ($gesamtStatus==='offen')?'status-offen':'status-geschlossen' ?>">
-  <b>Aktueller Status:</b> <?= strtoupper(htmlspecialchars($gesamtStatus)) ?><br>
-  <small><?= (new IntlDateFormatter('de_DE',IntlDateFormatter::FULL,IntlDateFormatter::SHORT,'Europe/Berlin',IntlDateFormatter::GREGORIAN,'EEEE, dd. MMMM yyyy'))->format(new DateTime()) ?></small>
-</div>
 
-<!-- Relaisstatus -->
-<section>
-  <h2>Aktuelle Relais-Zustände (Arduino)</h2>
-  <div id="relaisContainer" class="relais-status">
-    <?php foreach($relais as $r):
-      $cls = ($r['status']==='ON') ? 'relais-on' : (($r['status']==='OFF') ? 'relais-off' : 'relais-unknown'); ?>
-      <div class="relais-box <?= $cls ?>" id="relais<?= htmlspecialchars($r['relais_nummer']) ?>">
-        <h3>Relais <?= htmlspecialchars($r['relais_nummer']) ?></h3>
-        <p><strong><?= htmlspecialchars($r['status']) ?></strong></p>
-        <small><?= date('d.m.Y H:i',strtotime($r['timestamp'])) ?></small>
-      </div>
-    <?php endforeach; ?>
-  </div>
-</section>
+
 
 <!-- Nächster geplanter Befehl -->
 <section>
