@@ -2,7 +2,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
-ini_set('error_log', __DIR__ . '/scheduler_error.log');
+ini_set('error_log', __DIR__ . '/logs/scheduler_error.log');
 require_once __DIR__ . '/db.php';
 date_default_timezone_set('Europe/Berlin');
 
@@ -130,5 +130,5 @@ $stmt->execute(['ip' => $arduino_ip, 'desired' => $desired_bitmap]);
 /* ============================================================
    LOGDATEI
    ============================================================ */
-file_put_contents(__DIR__ . "/tor.log", $log . "\n", FILE_APPEND);
+file_put_contents(__DIR__ . "/logs/tor.log", $log . "\n", FILE_APPEND);
 echo nl2br(htmlspecialchars($log));

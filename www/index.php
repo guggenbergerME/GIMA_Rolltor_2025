@@ -174,5 +174,11 @@ for($i=0; $i<4; $i++){
 </main>
 
 <?php include __DIR__.'/footer.php'; ?>
+<script>
+// Seite alle 30 Sekunden neu laden
+setTimeout(() => {
+  location.reload();
+}, 30000);
+</script>
 </body>
 </html>
