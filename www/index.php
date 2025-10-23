@@ -120,24 +120,7 @@ for($i=0; $i<4; $i++){
 </header>
 
 <main class="container">
-<h1>Rolltor Steuerung – Übersicht</h1>
-
-<!-- Relaisstatus -->
-<section>
-  <h2>Aktueller Relaisstatus (Arduino <?= htmlspecialchars($arduino_ip) ?>)</h2>
-  <div class="relais-status">
-    <?php foreach($relais as $r): 
-      $class = $r['status']==='ON'?'relais-on':'relais-off'; ?>
-      <div class="relais-box <?= $class ?>" id="relais<?= $r['nummer'] ?>">
-        <strong>Relais <?= $r['nummer'] ?></strong><br>
-        <span><?= $r['status'] ?></span><br>
-      </div>
-    <?php endforeach; ?>
-  </div>
-  <?php if($updated): ?>
-    <p><small>Letztes Update: <?= htmlspecialchars(date('d.m.Y H:i:s', strtotime($updated))) ?></small></p>
-  <?php endif; ?>
-</section>
+<h1>Werktor - GIMA Neunstetten</h1>
 
 <!-- Nächster geplanter Befehl -->
 <section>
@@ -171,6 +154,25 @@ for($i=0; $i<4; $i++){
     <?php else: ?><p><i>Keine Sondertage definiert.</i></p><?php endif; ?>
   </div>
 </section>
+
+<!-- Relaisstatus -->
+<section>
+  <h2>Schaltstatus (Tormodul <?= htmlspecialchars($arduino_ip) ?>)</h2>
+  <div class="relais-status">
+    <?php foreach($relais as $r): 
+      $class = $r['status']==='ON'?'relais-on':'relais-off'; ?>
+      <div class="relais-box <?= $class ?>" id="relais<?= $r['nummer'] ?>">
+        <strong>Relais <?= $r['nummer'] ?></strong><br>
+        <span><?= $r['status'] ?></span><br>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php if($updated): ?>
+    <p><small>Letztes Update: <?= htmlspecialchars(date('d.m.Y H:i:s', strtotime($updated))) ?></small></p>
+  <?php endif; ?>
+</section>
+
+
 </main>
 
 <?php include __DIR__.'/footer.php'; ?>
