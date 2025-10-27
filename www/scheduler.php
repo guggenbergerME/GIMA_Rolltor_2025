@@ -16,7 +16,7 @@ $arduino_pass = "1234";
 $relais_auf        = 1;   // Relais 1 = Daueröffnung
 $relais_schliessen = 2;   // Relais 2 = Schließimpuls
 $impuls_dauer_ms   = 1000; // Impulsdauer 0,5 s
-$impuls_interval_min = 5; // nur alle 5 min ein Impuls erlaubt
+$impuls_interval_min = 2; // nur alle 5 min ein Impuls erlaubt
 
 /* ============================================================
    UDP SENDEN
