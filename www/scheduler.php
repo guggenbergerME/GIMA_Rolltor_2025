@@ -2,8 +2,8 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
-ini_set('error_log', __DIR__ . '/logs/scheduler_error.log');
-require_once __DIR__ . '/db.php';
+ini_set('error_log', __DIR__ . '/scheduler_error.log');
+require_once 'db.php';
 date_default_timezone_set('Europe/Berlin');
 
 /* ============================================================
@@ -13,10 +13,10 @@ $arduino_ip   = "10.140.1.10";
 $arduino_port = 8888;
 $arduino_pass = "1234";
 
-$relais_auf        = 1; // Tor-Auf (dauerhaft)
-$relais_schliessen = 2; // Schließimpuls
-$impuls_interval_min = 5;
-$impuls_dauer_ms     = 500;
+$relais_auf        = 1;   // Relais 1 = Daueröffnung
+$relais_schliessen = 2;   // Relais 2 = Schließimpuls
+$impuls_dauer_ms   = 1000; // Impulsdauer 0,5 s
+$impuls_interval_min = 5; // nur alle 5 min ein Impuls erlaubt
 
 /* ============================================================
    UDP SENDEN
@@ -47,11 +47,11 @@ function feiertage_bayern($jahr) {
 /* ============================================================
    AKTUELLE REGEL
    ============================================================ */
-$heute = date('Y-m-d');
-$uhrzeit = date('H:i');
-$minute = intval(date('i'));
+$heute     = date('Y-m-d');
+$uhrzeit   = date('H:i');
+$minute    = intval(date('i'));
 $wochentag = date('N');
-$jahr = date('Y');
+$jahr      = date('Y');
 
 $stmt = $pdo->query("SELECT * FROM torzeiten");
 $torzeiten = [];
@@ -63,14 +63,14 @@ $sondertag = $pdo->query("SELECT * FROM sondertage WHERE datum = '$heute'")->fet
 $feiertage = feiertage_bayern($jahr);
 
 if ($sondertag) {
-    $regel = "sonder";
+    $regel  = "sonder";
     $status = $sondertag['status'];
 } elseif (in_array($heute, $feiertage) || $wochentag >= 6) {
-    $regel = "feiertag";
+    $regel  = "feiertag";
     $status = "geschlossen";
 } else {
-    $modus = (date('I') == 1) ? "sommer" : "winter";
-    $regel = $modus;
+    $modus  = (date('I') == 1) ? "sommer" : "winter";
+    $regel  = $modus;
     $status = "automatisch";
 }
 
@@ -89,46 +89,56 @@ if ($regel === "sonder") {
 }
 
 /* ============================================================
-   AKTUELLE BITMAP LADEN
+   AKTUELLEN UND LETZTEN RELAISZUSTAND LADEN
    ============================================================ */
-$stmt = $pdo->prepare("SELECT desired_state FROM relais_status WHERE ip = :ip LIMIT 1");
+$stmt = $pdo->prepare("SELECT desired_state, current_state FROM relais_status WHERE ip = :ip LIMIT 1");
 $stmt->execute(['ip' => $arduino_ip]);
-$bitmap = $stmt->fetchColumn();
-if (!$bitmap) $bitmap = "0000"; // Standardwert
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$desired_bitmap = $bitmap;
-$relais_index = $relais_auf - 1;
+$desired = $row['desired_state'] ?? '0000';
+$current = $row['current_state'] ?? $desired;
+$bitmap  = str_split($desired);
+
+// Relais 1 = Daueröffnung
+$letzter_auf_status = $bitmap[$relais_auf - 1];
+$aktueller_auf_status = $tor_offen ? '1' : '0';
+
+$log  = "[" . date('Y-m-d H:i:s') . "] Regel: $regel | Zeit: $uhrzeit | Tor: ";
+$log .= $tor_offen ? "OFFEN" : "GESCHLOSSEN";
 
 /* ============================================================
-   TORSTATUS SETZEN IM BITMUSTER
+   BITMAP ANPASSEN (Relais 1)
    ============================================================ */
-$aktueller_auf_status = $tor_offen ? "1" : "0";
-$desired_bitmap[$relais_index] = $aktueller_auf_status;
-
-$log = "[" . date('Y-m-d H:i:s') . "] Regel: $regel | Zeit: $uhrzeit | Tor: " . ($tor_offen ? "OFFEN" : "ZU");
-
-/* ============================================================
-   SCHLIEẞIMPULS ALLE 5 MINUTEN
-   ============================================================ */
-if (!$tor_offen && $minute % $impuls_interval_min == 0) {
-    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=ON");
-    usleep($impuls_dauer_ms * 1000);
-    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=OFF");
-    $log .= " → Schließimpuls gesendet";
+if ($letzter_auf_status !== $aktueller_auf_status) {
+    $bitmap[$relais_auf - 1] = $aktueller_auf_status;
+    $desired = implode('', $bitmap);
+    $msg = "PASS=$arduino_pass;BITMAP=$desired";
+    send_udp($arduino_ip, $arduino_port, $msg);
+    $log .= " → Relais 1 (" . ($tor_offen ? "ON" : "OFF") . ")";
+    $stmt = $pdo->prepare("
+        INSERT INTO relais_status (ip, desired_state, current_state, updated_at)
+        VALUES (:ip, :desired, :current, NOW())
+        ON DUPLICATE KEY UPDATE desired_state=:desired, updated_at=NOW()
+    ");
+    $stmt->execute(['ip' => $arduino_ip, 'desired' => $desired, 'current' => $current]);
+} else {
+    $log .= " (keine Änderung)";
 }
 
 /* ============================================================
-   DATENBANK AKTUALISIEREN
+   SCHLIEẞIMPULS (Relais 2) AUSSERHALB DER ÖFFNUNGSZEITEN
    ============================================================ */
-$stmt = $pdo->prepare("
-    INSERT INTO relais_status (ip, desired_state, current_state, updated_at)
-    VALUES (:ip, :desired, :desired, NOW())
-    ON DUPLICATE KEY UPDATE desired_state = :desired, updated_at = NOW()
-");
-$stmt->execute(['ip' => $arduino_ip, 'desired' => $desired_bitmap]);
+if (!$tor_offen && $minute % $impuls_interval_min == 0) {
+    $log .= " → Schließimpuls gesendet (Relais 2)\n";
+    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=ON");
+    usleep($impuls_dauer_ms * 1000);
+    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=OFF");
+} else {
+    $log .= "\n";
+}
 
 /* ============================================================
-   LOGDATEI
+   LOGDATEI SCHREIBEN
    ============================================================ */
-file_put_contents(__DIR__ . "/logs/tor.log", $log . "\n", FILE_APPEND);
+file_put_contents(__DIR__ . "/tor.log", $log, FILE_APPEND);
 echo nl2br(htmlspecialchars($log));
