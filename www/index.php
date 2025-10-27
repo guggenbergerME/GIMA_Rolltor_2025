@@ -76,7 +76,7 @@ $sondertage_preview = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $next = find_next_command($pdo,365);
 
 // Relais-Status aus DB (aktueller Zustand des Arduino)
-$arduino_ip = "10.140.1.10"; // deine feste Arduino-IP
+$arduino_ip = "10.140.1.10"; // feste Arduino-IP
 $stmt = $pdo->prepare("SELECT current_state, updated_at FROM relais_status WHERE ip = :ip LIMIT 1");
 $stmt->execute(['ip' => $arduino_ip]);
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -85,10 +85,19 @@ $bitmap = $row['current_state'] ?? '0000';
 $updated = $row['updated_at'] ?? null;
 $relais = [];
 
+// Relaisnamen definieren
+$relaisNamen = [
+    1 => 'Daueröffnung',
+    2 => 'Schließung',
+    3 => 'Relais 3',
+    4 => 'Relais 4'
+];
+
 for($i=0; $i<4; $i++){
     $state = isset($bitmap[$i]) && $bitmap[$i]==='1' ? 'ON' : 'OFF';
     $relais[] = [
         'nummer' => $i+1,
+        'name'   => $relaisNamen[$i+1],
         'status' => $state
     ];
 }
@@ -100,7 +109,7 @@ for($i=0; $i<4; $i++){
 <title>Rolltor Steuerung – Übersicht</title>
 <link rel="stylesheet" href="style.css">
 <style>
-.relais-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px;}
+.relais-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px;}
 .relais-box{border:1px solid #ccc;border-radius:10px;padding:8px;text-align:center;background:#fafafa;}
 .relais-on{background:#c8f7c5;border-color:#4CAF50;}
 .relais-off{background:#f7c5c5;border-color:#f44336;}
@@ -120,7 +129,24 @@ for($i=0; $i<4; $i++){
 </header>
 
 <main class="container">
-<h1>Werktor - GIMA Neunstetten</h1>
+<h1>Rolltor Steuerung – Übersicht</h1>
+
+<!-- Relaisstatus -->
+<section>
+  <h2>Aktueller Relaisstatus (Arduino <?= htmlspecialchars($arduino_ip) ?>)</h2>
+  <div class="relais-status">
+    <?php foreach($relais as $r): 
+      $class = $r['status']==='ON'?'relais-on':'relais-off'; ?>
+      <div class="relais-box <?= $class ?>" id="relais<?= $r['nummer'] ?>">
+        <strong><?= htmlspecialchars($r['name']) ?></strong><br>
+        <span><?= $r['status']=='ON'?'EIN':'AUS' ?></span><br>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php if($updated): ?>
+    <p><small>Letztes Update: <?= htmlspecialchars(date('d.m.Y H:i:s', strtotime($updated))) ?></small></p>
+  <?php endif; ?>
+</section>
 
 <!-- Nächster geplanter Befehl -->
 <section>
@@ -154,33 +180,14 @@ for($i=0; $i<4; $i++){
     <?php else: ?><p><i>Keine Sondertage definiert.</i></p><?php endif; ?>
   </div>
 </section>
-
-<!-- Relaisstatus -->
-<section>
-  <h2>Schaltstatus (Tormodul <?= htmlspecialchars($arduino_ip) ?>)</h2>
-  <div class="relais-status">
-    <?php foreach($relais as $r): 
-      $class = $r['status']==='ON'?'relais-on':'relais-off'; ?>
-      <div class="relais-box <?= $class ?>" id="relais<?= $r['nummer'] ?>">
-        <strong>Relais <?= $r['nummer'] ?></strong><br>
-        <span><?= $r['status'] ?></span><br>
-      </div>
-    <?php endforeach; ?>
-  </div>
-  <?php if($updated): ?>
-    <p><small>Letztes Update: <?= htmlspecialchars(date('d.m.Y H:i:s', strtotime($updated))) ?></small></p>
-  <?php endif; ?>
-</section>
-
-
 </main>
 
 <?php include __DIR__.'/footer.php'; ?>
+
 <script>
 // Seite alle 30 Sekunden neu laden
-setTimeout(() => {
-  location.reload();
-}, 30000);
+setTimeout(() => { location.reload(); }, 30000);
 </script>
+
 </body>
 </html>
