@@ -15,14 +15,18 @@ $arduino_pass = "1234";
 
 $relais_auf        = 1;   // Relais 1 = Daueröffnung
 $relais_schliessen = 2;   // Relais 2 = Schließimpuls
-$impuls_dauer_ms   = 1000; // Impulsdauer 0,5 s
-$impuls_interval_min = 2; // nur alle 5 min ein Impuls erlaubt
+$impuls_dauer_ms   = 1000; // Impulsdauer 1 Sekunde
+$impuls_interval_min = 3;  // nur alle 3 Minuten ein Impuls erlaubt
 
 /* ============================================================
    UDP SENDEN
    ============================================================ */
 function send_udp($ip, $port, $message) {
     $sock = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+    if ($sock === false) {
+        error_log("Socket konnte nicht erstellt werden");
+        return;
+    }
     socket_sendto($sock, $message, strlen($message), 0, $ip, $port);
     socket_close($sock);
 }
@@ -100,8 +104,8 @@ $current = $row['current_state'] ?? $desired;
 $bitmap  = str_split($desired);
 
 // Relais 1 = Daueröffnung
-$letzter_auf_status = $bitmap[$relais_auf - 1];
-$aktueller_auf_status = $tor_offen ? '1' : '0';
+$letzter_auf_status    = $bitmap[$relais_auf - 1];
+$aktueller_auf_status  = $tor_offen ? '1' : '0';
 
 $log  = "[" . date('Y-m-d H:i:s') . "] Regel: $regel | Zeit: $uhrzeit | Tor: ";
 $log .= $tor_offen ? "OFFEN" : "GESCHLOSSEN";
@@ -115,6 +119,7 @@ if ($letzter_auf_status !== $aktueller_auf_status) {
     $msg = "PASS=$arduino_pass;BITMAP=$desired";
     send_udp($arduino_ip, $arduino_port, $msg);
     $log .= " → Relais 1 (" . ($tor_offen ? "ON" : "OFF") . ")";
+    
     $stmt = $pdo->prepare("
         INSERT INTO relais_status (ip, desired_state, current_state, updated_at)
         VALUES (:ip, :desired, :current, NOW())
@@ -129,10 +134,9 @@ if ($letzter_auf_status !== $aktueller_auf_status) {
    SCHLIEẞIMPULS (Relais 2) AUSSERHALB DER ÖFFNUNGSZEITEN
    ============================================================ */
 if (!$tor_offen && $minute % $impuls_interval_min == 0) {
-    $log .= " → Schließimpuls gesendet (Relais 2)\n";
-    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=ON");
-    usleep($impuls_dauer_ms * 1000);
-    send_udp($arduino_ip, $arduino_port, "PASS=$arduino_pass;R{$relais_schliessen}=OFF");
+    $log .= " → Schließimpuls (Relais 2 für {$impuls_dauer_ms} ms)\n";
+    $msg = "PASS=$arduino_pass;PULSE={$relais_schliessen},{$impuls_dauer_ms}";
+    send_udp($arduino_ip, $arduino_port, $msg);
 } else {
     $log .= "\n";
 }
