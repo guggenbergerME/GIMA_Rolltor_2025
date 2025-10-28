@@ -16,7 +16,10 @@ $arduino_pass = "1234";
 $relais_auf        = 1;   // Relais 1 = Daueröffnung
 $relais_schliessen = 2;   // Relais 2 = Schließimpuls
 $impuls_dauer_ms   = 1000; // Impulsdauer 1 Sekunde
-$impuls_interval_min = 3;  // nur alle 3 Minuten ein Impuls erlaubt
+$impuls_interval_min = 5;  // nur alle 3 Minuten ein Impuls erlaubt
+$impuls_sperrzeit_sec = 240; // 2 Minuten Sperrzeit seit letztem Impuls
+
+$last_pulse_file = __DIR__ . '/last_pulse.txt';
 
 /* ============================================================
    UDP SENDEN
@@ -133,10 +136,28 @@ if ($letzter_auf_status !== $aktueller_auf_status) {
 /* ============================================================
    SCHLIEẞIMPULS (Relais 2) AUSSERHALB DER ÖFFNUNGSZEITEN
    ============================================================ */
-if (!$tor_offen && $minute % $impuls_interval_min == 0) {
+$send_pulse = false;
+$now = time();
+
+// Prüfen, ob Sperrzeit eingehalten wurde
+if (file_exists($last_pulse_file)) {
+    $last_pulse_time = intval(file_get_contents($last_pulse_file));
+    $since_last_pulse = $now - $last_pulse_time;
+    if ($since_last_pulse >= $impuls_sperrzeit_sec) {
+        $send_pulse = true;
+    } else {
+        $log .= " → Kein Impuls (zu früh, " . $since_last_pulse . "s seit letztem)\n";
+    }
+} else {
+    $send_pulse = true; // Erste Ausführung
+}
+
+// Impuls nur senden, wenn außerhalb Öffnungszeit UND Intervall erfüllt
+if (!$tor_offen && $send_pulse && $minute % $impuls_interval_min == 0) {
     $log .= " → Schließimpuls (Relais 2 für {$impuls_dauer_ms} ms)\n";
     $msg = "PASS=$arduino_pass;PULSE={$relais_schliessen},{$impuls_dauer_ms}";
     send_udp($arduino_ip, $arduino_port, $msg);
+    file_put_contents($last_pulse_file, $now); // Zeitpunkt speichern
 } else {
     $log .= "\n";
 }
