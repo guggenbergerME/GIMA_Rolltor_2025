@@ -1,6 +1,9 @@
 <?php
 // www/api/arduino-relay-status.php
 // (c) 2025 Tobias Guggenberger
+//
+// Empfängt JSON {"ip":"10.140.1.10","status":"1010"}
+// Vergleicht Soll/Ist in der DB und sendet {"desired":"1010"} als Antwort zurück.
 
 require_once __DIR__ . '/../db.php';
 header('Content-Type: application/json; charset=utf-8');
@@ -16,54 +19,50 @@ if (!$data || !isset($data['ip']) || !isset($data['status'])) {
     exit;
 }
 
-$ip = $data['ip'];
+$ip      = $data['ip'];
 $current = $data['status'];
 
 try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // --- Soll- und Istzustand abrufen ---
+    // Soll-/Ist-Zustand abrufen oder neu anlegen
     $stmt = $pdo->prepare("SELECT desired_state, current_state FROM relais_status WHERE ip = :ip LIMIT 1");
     $stmt->execute(['ip' => $ip]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$row) {
-        // Neuer Arduino → Eintrag anlegen
-        $insert = $pdo->prepare("
+        // Neues Gerät anlegen
+        $pdo->prepare("
             INSERT INTO relais_status (ip, desired_state, current_state, updated_at)
             VALUES (:ip, :desired, :current, NOW())
-        ");
-        $insert->execute(['ip' => $ip, 'desired' => $current, 'current' => $current]);
+        ")->execute(['ip' => $ip, 'desired' => $current, 'current' => $current]);
         $desired = $current;
-        $action = "NEW_ENTRY";
+        $action  = "NEW_ENTRY";
     } else {
         $desired = $row['desired_state'];
-
         // Istzustand aktualisieren
-        $update = $pdo->prepare("
+        $pdo->prepare("
             UPDATE relais_status
             SET current_state = :current, updated_at = NOW()
             WHERE ip = :ip
-        ");
-        $update->execute(['current' => $current, 'ip' => $ip]);
+        ")->execute(['current' => $current, 'ip' => $ip]);
 
-        // Vergleich Soll/Ist
-        if ($desired !== $current) {
-            $action = "STATE_MISMATCH";
-        } else {
-            $action = "OK";
-        }
+        $action = ($desired !== $current) ? "STATE_MISMATCH" : "OK";
     }
 
-    // --- Log-Eintrag ---
-    $log = $pdo->prepare("
-        INSERT INTO relais_log (ip, reported_state, desired_state, action_taken)
-        VALUES (:ip, :reported, :desired, :action)
-    ");
-    $log->execute(['ip' => $ip, 'reported' => $current, 'desired' => $desired, 'action' => $action]);
+    // Log-Eintrag
+    $pdo->prepare("
+        INSERT INTO relais_log (ip, reported_state, desired_state, action_taken, created_at)
+        VALUES (:ip, :reported, :desired, :action, NOW())
+    ")->execute(['ip' => $ip, 'reported' => $current, 'desired' => $desired, 'action' => $action]);
 
-    // --- Antwort an Arduino ---
-    echo json_encode(['desired' => $desired]);
+    // Antwort an Arduino
+    echo json_encode([
+        'desired' => $desired,
+        'action'  => $action,
+        'ip'      => $ip,
+        'time'    => date('Y-m-d H:i:s')
+    ]);
 
 } catch (Exception $e) {
     http_response_code(500);

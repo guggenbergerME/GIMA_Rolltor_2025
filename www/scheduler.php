@@ -16,8 +16,8 @@ $arduino_pass = "1234";
 $relais_auf        = 1;   // Relais 1 = Daueröffnung
 $relais_schliessen = 2;   // Relais 2 = Schließimpuls
 $impuls_dauer_ms   = 1000; // Impulsdauer 1 Sekunde
-$impuls_interval_min = 5;  // nur alle 3 Minuten ein Impuls erlaubt
-$impuls_sperrzeit_sec = 240; // 2 Minuten Sperrzeit seit letztem Impuls
+$impuls_interval_min = 2;  // nur alle 3 Minuten ein Impuls erlaubt
+$impuls_sperrzeit_sec = 1; // 2 Minuten Sperrzeit seit letztem Impuls
 
 $last_pulse_file = __DIR__ . '/last_pulse.txt';
 
