@@ -4,8 +4,7 @@ services:
   web:
     build: ./php
     container_name: rolltor_web
-    ports:
-      - "80:80"
+    network_mode: "host"    # <— NEU: direkter Zugriff auf Hostnetz
     volumes:
       - ./www:/var/www/html
     depends_on:
