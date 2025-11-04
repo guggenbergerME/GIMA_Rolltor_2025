@@ -117,16 +117,9 @@ for($i=0; $i<4; $i++){
 </style>
 </head>
 <body>
-<header class="navbar">
-  <img src="logo.png" class="nav-logo" alt="GIMA">
-  <nav>
-    <a href="index.php" class="active">Übersicht</a>
-    <a href="zeiten.php">Zeiten</a>
-    <a href="sondertage.php">Sondertage</a>
-    <a href="vorschau.php">Vorschau</a>
-    <a href="relais.php">Relais</a>
-  </nav>
-</header>
+<?PHP 
+include("include/header_nav.php");
+?>
 
 <main class="container">
 <h1>Rolltor Steuerung – Übersicht</h1>

@@ -135,16 +135,9 @@ button.off{background:#f44336;color:#fff}
 </style>
 </head>
 <body>
-<header class="navbar">
-  <img src="logo.png" class="nav-logo" alt="GIMA">
-  <nav>
-    <a href="index.php">Übersicht</a>
-    <a href="zeiten.php">Zeiten</a>
-    <a href="sondertage.php">Sondertage</a>
-    <a href="vorschau.php">Vorschau</a>
-    <a href="relais.php" class="active">Relais</a>
-  </nav>
-</header>
+<?PHP 
+include("include/header_nav.php");
+?>
 
 <a href="?logout=1" class="logout">🚪 Logout</a>
 <h1>Manuelle Relaissteuerung (Arduino <?=htmlspecialchars($arduino_ip)?>)</h1>

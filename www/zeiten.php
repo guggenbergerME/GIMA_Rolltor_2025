@@ -27,15 +27,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 </head>
 <body>
 
-<header class="navbar">
-  <img src="logo.png" class="nav-logo" alt="GIMA">
-  <nav>
-    <a href="index.php">Übersicht</a>
-    <a href="zeiten.php" class="active">Zeiten</a>
-    <a href="sondertage.php">Sondertage</a>
-    <a href="vorschau.php">Vorschau</a>
-  </nav>
-</header>
+<?PHP 
+include("include/header_nav.php");
+?>
 
 <h1>Sommer- und Winterzeiten</h1>
 

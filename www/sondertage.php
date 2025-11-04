@@ -77,15 +77,9 @@ form.inline { display: inline; margin: 0; padding: 0; }
 </head>
 <body>
 
-<header class="navbar">
-  <img src="logo.png" class="nav-logo" alt="GIMA">
-  <nav>
-    <a href="index.php" class="active">Übersicht</a>
-    <a href="zeiten.php">Zeiten</a>
-    <a href="sondertage.php">Sondertage</a>
-    <a href="vorschau.php">Vorschau</a>
-  </nav>
-</header>
+<?PHP 
+include("include/header_nav.php");
+?>
 
 <h1>Sondertage verwalten</h1>
 
