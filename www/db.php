@@ -1,5 +1,5 @@
 <?php
-$dsn = 'mysql:host=172.18.0.2;dbname=rolltor;charset=utf8mb4';
+$dsn  = 'mysql:host=db;dbname=rolltor;charset=utf8mb4';
 $user = 'rolltor_user';
 $pass = 'rolltor_pass';
 
@@ -10,3 +10,4 @@ try {
     die("DB-Fehler: " . $e->getMessage());
 }
 ?>
+

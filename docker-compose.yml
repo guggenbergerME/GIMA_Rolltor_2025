@@ -4,7 +4,7 @@ services:
   web:
     build: ./php
     container_name: rolltor_web
-    network_mode: "host"    # <— NEU: direkter Zugriff auf Hostnetz
+    # network_mode: "host"    # <— RAUS DAMIT
     volumes:
       - ./www:/var/www/html
     depends_on:
@@ -12,6 +12,8 @@ services:
     environment:
       - TZ=Europe/Berlin
     restart: unless-stopped
+    ports:
+      - "80:80"               # falls du den Webserver vom Host aus erreichen willst
 
   db:
     image: mariadb:11
@@ -33,7 +35,7 @@ services:
     ports:
       - "8081:80"
     environment:
-      PMA_HOST: db
+      PMA_HOST: db            # passt
       PMA_USER: rolltor_user
       PMA_PASSWORD: rolltor_pass
       UPLOAD_LIMIT: 50M
